@@ -1,0 +1,21 @@
+torch>=2.1.0
+# Pinned: Moondream2's custom trust_remote_code modeling class (HfMoondream)
+# predates transformers' newer tied-weights refactor (all_tied_weights_keys),
+# which raises AttributeError on load with transformers >= ~4.50. Keep this
+# pinned rather than loosened to >= until Moondream2's remote code is updated.
+transformers==4.46.3
+tokenizers>=0.20,<0.21
+accelerate>=0.33.0
+bitsandbytes>=0.43.0
+peft>=0.12.0
+datasets>=2.20.0
+pillow>=10.0.0
+pyyaml>=6.0
+pandas>=2.0.0
+matplotlib>=3.8.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+einops>=0.7.0
+wandb>=0.17.0
+tqdm>=4.66.0

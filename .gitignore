@@ -1,0 +1,38 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large Dataset files
+data/
+raw/
+images/
+*.jpg
+*.jpeg
+*.png
+*.jsonl
+
+# Keep metrics and plots
+!results/metrics.csv
+!results/*.png
+
+# Model weights and checkpoints (large files)
+models/
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Notebook caches
+.ipynb_checkpoints/

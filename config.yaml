@@ -1,0 +1,82 @@
+# Single source of truth for every script in this repo. No hardcoded paths
+# or hyperparameters belong in the scripts themselves - add them here.
+
+model:
+  id: vikhyatk/moondream2
+  revision: null          # pin e.g. "2025-01-09" for reproducibility once you've verified against it
+  trust_remote_code: true
+
+quantization:
+  # IMPORTANT: Moondream2 ships a custom modeling implementation with its own
+  # weight/quantization classes (see weights.py / layers.py in the HF repo),
+  # NOT plain torch.nn.Linear. It is unverified whether HF's BitsAndBytesConfig
+  # actually gets honored by this model's custom `from_pretrained` path, or is
+  # silently ignored. The base model is only ~2B params (~4GB in fp16), which
+  # fits comfortably on a 16GB T4 even unquantized once you account for the
+  # base model being frozen (no optimizer state) with only a small LoRA
+  # adapter being trained. Default is fp16, no bnb quantization.
+  # Run scripts/inspect_model.py first - it reports actual parameter dtypes
+  # so you can confirm whether load_in_4bit had any effect before relying on it.
+  load_in_4bit: false
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: true
+  bnb_4bit_compute_dtype: float16
+  torch_dtype: float16
+
+lora:
+  # Moondream2 has its OWN native LoRA hook: attn()/text_decoder() in text.py
+  # accept a `lora` dict keyed as lora["text"]["blocks"][str(layer_idx)]["attn"/"mlp"]["qkv"/"proj"/"fc1"/"fc2"]["A"/"B"].
+  # scripts/train.py builds this dict directly (see MoondreamLoRA in scripts/common.py)
+  # rather than using PEFT's get_peft_model(), because PEFT's module-based
+  # target_modules matching does not apply to this architecture.
+  target_modules: [qkv, proj, fc1, fc2]   # documents which sub-projections get adapted; used by inspect_model.py
+  rank: 16
+  alpha: 32
+  n_layers: 24            # must match TextConfig.n_layers on the loaded model (verify via inspect_model.py)
+  dim: 2048                # TextConfig.dim
+  ff_dim: 8192              # TextConfig.ff_dim
+
+training:
+  seed: 42
+  batch_size: 1
+  gradient_accumulation_steps: 16
+  epochs: 3
+  lr: 2.0e-4
+  lr_schedule: cosine       # cosine | constant
+  warmup_ratio: 0.03
+  optimizer: paged_adamw_8bit
+  gradient_checkpointing: true
+  max_answer_tokens: 32
+  eval_every_steps: 100
+  logging_steps: 10
+
+data:
+  dataset_id: lmms-lab/VQAv2
+  dataset_split: validation
+  n_samples: 3000
+  test_size: 300
+  min_trivial_answer_len: 1   # answers with length <= this many chars are dropped by the filter
+  raw_dir: data/raw
+  train_unfiltered: data/train_unfiltered.jsonl
+  train_filtered: data/train_filtered.jsonl
+  test: data/test.jsonl
+
+wandb:
+  enabled: false
+  project: vlm-lora-study
+  entity: null
+
+paths:
+  models_dir: models
+  results_dir: results
+  metrics_csv: results/metrics.csv
+
+ablation:
+  ranks: [4, 8, 16, 32]
+  schedules: [cosine, constant]
+  data_variants: [filtered, unfiltered]
+
+serve:
+  host: 0.0.0.0
+  port: 8000
+  adapter_path: models/best
