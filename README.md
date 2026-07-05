@@ -10,10 +10,10 @@ GPU (developed against a Kaggle T4).
 ```mermaid
 flowchart TD
     A[HuggingFaceM4/VQAv2 slice] -->|prepare_data.py| B[train_filtered.jsonl / train_unfiltered.jsonl / test.jsonl]
-    B --> C[baseline.py\nzero-shot accuracy]
-    B --> D[train.py\nMoondreamLoRA + frozen Moondream2]
-    D --> E[models/rank{R}_{schedule}_{data}/\nlora_adapter.pt + train_stats.json]
-    E --> F[evaluate.py\naccuracy + delta vs baseline]
+    B --> C["baseline.py<br/>zero-shot accuracy"]
+    B --> D["train.py<br/>MoondreamLoRA + frozen Moondream2"]
+    D --> E["models/rank{R}_{schedule}_{data}/<br/>lora_adapter.pt + train_stats.json"]
+    E --> F["evaluate.py<br/>accuracy + delta vs baseline"]
     C --> G[results/metrics.csv]
     F --> G
     G --> H[results/plots.py\naccuracy-vs-rank, filtered-vs-unfiltered]
