@@ -45,7 +45,6 @@ training:
   lr_schedule: cosine       # cosine | constant
   warmup_ratio: 0.03
   optimizer: paged_adamw_8bit
-  gradient_checkpointing: true
   max_answer_tokens: 32
   eval_every_steps: 100
   logging_steps: 10

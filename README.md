@@ -1,13 +1,13 @@
-# Efficient VLM Fine-Tuning Study: QLoRA Ablation on Moondream2
+# Efficient VLM Fine-Tuning Study: LoRA Ablation on Moondream2
 
-An engineering study on customizing the lightweight **Moondream2 (2B)** Vision-Language Model on a VQAv2 slice. By building a custom, hand-rolled LoRA adapter and resolving deep system-level hardware mismatches, this pipeline successfully raised visual question-answering accuracy from a **2.33% zero-shot baseline to 25.67%** on a consumer-grade 16GB GPU in under 2 hours.
+An engineering study on customizing the lightweight **Moondream2 (2B)** Vision-Language Model on a VQAv2 slice. By building a custom, hand-rolled LoRA adapter and resolving deep system-level hardware mismatches, this pipeline successfully raised visual question-answering accuracy from a **2.33% zero-shot baseline to 25.67%**; the best run trained in 45 min and the full 6-run ablation took ~3 h.
 
 ---
 
 ## 1. Executive Summary: The Narrative
 
 ### The Core Problem
-Vision-Language Models (VLMs) are highly capable but computationally massive. Fine-tuning the entire model is economically infeasible for most projects and destroys the model's pre-trained general knowledge. While Parameter-Efficient Fine-Tuning (PEFT/LoRA) is the standard solution, **Moondream2's custom architecture does not use standard PyTorch linear modules**; instead, it uses functional projection tensors, meaning standard libraries like HuggingFace PEFT cannot attach to it. 
+Vision-Language Models (VLMs) are highly capable but computationally massive. Fine-tuning the entire model is economically infeasible for most projects and destroys the model's pre-trained general knowledge. While Parameter-Efficient Fine-Tuning (PEFT/LoRA) is the standard solution, **Moondream2 has no standard `forward(labels=...)` training path, and its attention writes into a persistent KV cache, so the adapter plugs into the model's native LoRA hook through a cache-free forward pass.**
 
 ### The Engineering Method
 To solve this, we:
@@ -41,7 +41,7 @@ flowchart TD
 ```
 
 ### Why LoRA is Hand-Rolled
-Moondream2's custom model definition (`trust_remote_code=True`) defines attention and MLP layers functionally. Instead of subclassing `nn.Linear`, it applies operations using `F.linear(x, weight)`. Because there are no submodules for PEFT to wrap, our script registers the parameters under a custom `nn.Module` and formats them into a dictionary schema that is passed directly into Moondream2's native `text_decoder` forward pass.
+Moondream2 has no standard `forward(labels=...)` training path, and its attention writes into a persistent KV cache, so the adapter plugs into the model's native LoRA hook through a cache-free forward pass.
 
 ---
 
@@ -49,20 +49,24 @@ Moondream2's custom model definition (`trust_remote_code=True`) defines attentio
 
 The ablation matrix was executed on a single NVIDIA RTX 4060 Ti (16.7 GB VRAM) running sequentially to ensure full CUDA memory release between runs.
 
-| Config Name | Rank | LR Schedule | Data Variant | Accuracy | Δ vs Baseline | Trainable % | Train Time | Peak VRAM |
+| Config Name | Rank | LR Schedule | Data Variant | Exact-match accuracy | Δ vs baseline (percentage points) | Trainable % | Train Time | Peak VRAM |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **zero_shot_baseline** | — | — | — | **2.33%** | +0.00% | 0.00% | — | 4.47 GB |
-| **rank4_cosine_filtered** | 4 | cosine | filtered | **2.33%** | +0.00% | 0.16% | 22 min | 5.39 GB |
-| **rank8_cosine_filtered** | 8 | cosine | filtered | **2.00%** | −0.33% | 0.33% | 22 min | 5.41 GB |
-| **rank16_cosine_filtered** | 16 | cosine | filtered | **1.67%** | −0.66% | 0.65% | 45 min | 5.44 GB |
-| **rank32_cosine_filtered** | 32 | cosine | filtered | **2.00%** | −0.33% | 1.29% | 22 min | 5.51 GB |
-| **rank4_constant_filtered** | 4 | constant | filtered | **2.33%** | +0.00% | 0.16% | 22 min | 5.39 GB |
-| **rank4_cosine_unfiltered** | **4** | **cosine** | **unfiltered** | **25.67%** | **+23.34%** | **0.16%** | **45 min** | **5.39 GB** |
+| **zero_shot_baseline** | — | — | — | **2.33%** | +0.00 pp | 0.00% | — | 4.47 GB |
+| **rank4_cosine_filtered** | 4 | cosine | filtered | **2.33%** | +0.00 pp | 0.16% | 22 min | 5.39 GB |
+| **rank8_cosine_filtered** | 8 | cosine | filtered | **2.00%** | −0.33 pp | 0.33% | 22 min | 5.41 GB |
+| **rank16_cosine_filtered** | 16 | cosine | filtered | **1.67%** | −0.66 pp | 0.65% | 45 min | 5.44 GB |
+| **rank32_cosine_filtered** | 32 | cosine | filtered | **2.00%** | −0.33 pp | 1.29% | 22 min | 5.51 GB |
+| **rank4_constant_filtered** | 4 | constant | filtered | **2.33%** | +0.00 pp | 0.16% | 22 min | 5.39 GB |
+| **rank4_cosine_unfiltered** | **4** | **cosine** | **unfiltered** | **25.67%** | **+23.34 pp** | **0.16%** | **45 min** | **5.39 GB** |
 
 <p align="center">
   <img src="results/accuracy_vs_rank.png" width="45%" />
   <img src="results/filtered_vs_unfiltered.png" width="45%" />
 </p>
+
+The 2.33% baseline is likely deflated by the scorer: single-reference exact match
+with minimal normalization and no short-answer instruction in the prompt.
+Predictions weren't saved, so this isn't confirmed.
 
 ---
 
@@ -74,7 +78,7 @@ Our filtering heuristic dropped trivial answers (yes/no, single digits, etc.) un
 - **With them (Unfiltered):** The model learned the mapping for simple answers, establishing base weight adjustments that immediately carried over to test evaluation.
 
 ### 2. Rank Ablation & Immediate Returns Diminution
-Within the filtered dataset, increasing the rank of our LoRA adapter from 4 to 32 did not yield any accuracy improvements. In fact, increasing the parameter budget introduced a slight overfitting penalty (accuracy dropping from 2.33% to 1.67% at rank 16). For small-scale datasets, **Rank 4 (only 0.16% of total weights) provides the optimal capacity**.
+Within the filtered dataset, increasing the rank of our LoRA adapter from 4 to 32 did not yield any accuracy improvements. These gaps are only 1–2 questions out of 300, and rank was only tested on filtered data.
 
 ### 3. Learning Rate Schedule is Negligible
 At rank 4, transitioning from a `cosine` decay schedule to a `constant` schedule yielded identical baseline performance. This indicates that VLM adaptation on specialized tasks is far more sensitive to dataset variety and formatting than it is to schedule tuning.

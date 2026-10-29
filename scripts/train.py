@@ -1,4 +1,4 @@
-"""QLoRA-style fine-tune of Moondream2 using its native lora-dict mechanism.
+"""LoRA fine-tune of Moondream2 using its native lora-dict mechanism.
 
 IMPORTANT - read this before running the full matrix:
 Everything in `compute_lm_logits()` below was reconstructed by reading
@@ -154,12 +154,6 @@ def main():
         n_layers=lcfg["n_layers"], dim=lcfg["dim"], ff_dim=lcfg["ff_dim"], rank=rank, alpha=alpha, dtype=model_dtype
     ).to(device)
     trainable_pct = report_trainable_params(model, lora)
-
-    if tcfg["gradient_checkpointing"] and hasattr(model, "gradient_checkpointing_enable"):
-        try:
-            model.gradient_checkpointing_enable()
-        except Exception as e:
-            print(f"gradient_checkpointing_enable() failed/unsupported, continuing without it: {e}")
 
     import bitsandbytes as bnb
 
